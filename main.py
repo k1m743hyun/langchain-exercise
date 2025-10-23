@@ -9,6 +9,8 @@ from langchain_community.vectorstores.utils import DistanceStrategy
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain.schema.runnable import RunnablePassthrough
+from langchain.retrievers import ContextualCompressionRetriever
+from langchain.retrievers.document_compressors import LLMChainExtractor
 
 os.environ['GOOGLE_API_KEY'] = ''
 
@@ -45,29 +47,20 @@ if __name__ == '__main__':
         max_tokens=500,
     )
 
-    retriever = MultiQueryRetriever.from_llm(
-        retriever=vectorstore.as_retriever(),
-        llm=llm
+    retriever = vectorstore.as_retriever(
+        search_type='mmr',
+        search_kwargs={'k':7, 'fetch_k':20}
     )
 
     docs = retriever.get_relevant_documents(query)
+    #print(len(docs))
 
-    # Prompt
-    template = '''Answer the question based only on the following
-    context:
-    {context}
-    
-    Question: {question}
-    '''
+    compressor = LLMChainExtractor.from_llm(llm)
+    compression_retriever = ContextualCompressionRetriever(
+        base_compressor=compressor,
+        base_retriever=retriever
+    )
 
-    prompt = ChatPromptTemplate.from_template(template)
-
-    def format_docs(docs):
-        return '\n\n'.join([doc.page_content for doc in docs])
-
-    # Chain
-    chain = {'context':  retriever | format_docs, 'question': RunnablePassthrough()} | prompt | llm | StrOutputParser()
-
-    # Run
-    response = chain.invoke('카카오뱅크의 최근 영업실적을 요약해서 알려주세요.')
-    print(response)
+    compressed_docs = compression_retriever.get_relevant_documents(query)
+    print(len(compressed_docs))
+    print(compressed_docs)
