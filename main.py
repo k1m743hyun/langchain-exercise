@@ -1,12 +1,28 @@
-from langchain_community.tools import TavilySearchResults
+import os
+from langchain_experimental.tools import PythonAstREPLTool
+from langchain.agents import initialize_agent, AgentType
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+os.environ['GOOGLE_API_KEY'] = ''
 
 if __name__ == '__main__':
-    query = "2025년 애플의 주가 전망에 대해서 분석하세요."
+    python_repl = PythonAstREPLTool()
 
-    web_search = TavilySearchResults(max_results=2)
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash",
+        temperature=0,
+    )
 
-    search_results = web_search.invoke(query)
+    agent = initialize_agent(
+        [python_repl],
+        llm,
+        agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+        verbose=True
+    )
 
-    for result in search_results:
-        print(result)
-        print("-" * 100)
+    result = agent.run('''
+        1부터 10까지의 숫자 중 짝수만 출력하는 Python 코드를 작성하고 실행해주세요.
+        그리고 그 결과를 설명해주세요.
+    ''')
+
+    print(result)
