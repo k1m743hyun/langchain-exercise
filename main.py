@@ -1,28 +1,44 @@
 import os
-from langchain_experimental.tools import PythonAstREPLTool
-from langchain.agents import initialize_agent, AgentType
+import getpass
+import sqlite3
+import requests
+from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
+from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
+from langchain import hub
+from langgraph.prebuilt import create_react_agent
 
 os.environ['GOOGLE_API_KEY'] = ''
 
+def create_chinook_database():
+    url = "https://raw.githubusercontent.com/lerocha/chinook-database/master/ChinookDatabase/DataSources/Chinook_Sqlite.sql"
+    response = requests.get(url)
+    sql_script = response.text
+
+    connection = sqlite3.connect(":memory:", check_same_thread=False)
+    connection.executescript(sql_script)
+
+    return create_engine(
+        "sqlite://",
+        creator=lambda: connection,
+        poolclass=StaticPool,
+        connect_args={"check_same_thread": False}
+    )
+
 if __name__ == '__main__':
-    python_repl = PythonAstREPLTool()
+    db_engine = create_chinook_database()
+
+    db = SQLDatabase(db_engine)
 
     llm = ChatGoogleGenerativeAI(
         model="gemini-1.5-flash",
         temperature=0,
     )
 
-    agent = initialize_agent(
-        [python_repl],
-        llm,
-        agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-        verbose=True
-    )
+    toolkit = SQLDatabaseToolkit(db=db, llm=llm)
 
-    result = agent.run('''
-        1부터 10까지의 숫자 중 짝수만 출력하는 Python 코드를 작성하고 실행해주세요.
-        그리고 그 결과를 설명해주세요.
-    ''')
+    prompt_template = hub.pull("langchain-ai/sql-agent-system-prompt")
 
-    print(result)
+    system_message = prompt_template.format(dialect="SQLite", top_k=5)
