@@ -42,3 +42,19 @@ if __name__ == '__main__':
     prompt_template = hub.pull("langchain-ai/sql-agent-system-prompt")
 
     system_message = prompt_template.format(dialect="SQLite", top_k=5)
+
+    agent_executor = create_react_agent(
+        llm,
+        toolkit.get_tools(),
+        state_modifier=system_message
+    )
+
+    example_query = "2009년에 가장 많이 팔린 장르는 무엇이며, 해당 장르의 총 매출액은 얼마인가요?"
+
+    events = agent_executor.stream(
+        {"messages": [("user", example_query)]},
+        stream_mode="values"
+    )
+
+    for event in events:
+        event["messages"][-1].pretty_print()
